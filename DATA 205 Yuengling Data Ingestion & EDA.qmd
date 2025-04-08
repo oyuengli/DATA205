@@ -1,0 +1,280 @@
+---
+title: "Capstone Project EDA"
+author: "Olivia Yuengling"
+format: html
+editor: visual
+---
+
+## Loading Project Datasets + Packages
+
+```{r}
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+
+usda_expd <- read_csv("C:/Users/omyue/OneDrive/Desktop/DATA 205/USDA Expenditure Datasets/expd_merged.csv")
+
+usda_fmli <- read_csv("C:/Users/omyue/OneDrive/Desktop/DATA 205/USDA Expenditure Datasets/fmli_merged.csv")
+
+core_inflation <- read_csv("C:/Users/omyue/OneDrive/Desktop/DATA 205/Inflation Datasets/core_inflation_1983-2025.csv")
+
+food_prices <- read_csv("C:/Users/omyue/OneDrive/Desktop/DATA 205/Inflation Datasets/average_prices.csv")
+
+```
+
+# About Each Dataset
+
+## usda_expd
+
+```{r}
+head(usda_expd)
+```
+
+The original "expd" datasets within the USDA consumer expenditure dataset had more variables, but they were extracted in another piece of code to create this version of the dataset.
+
+### Variables
+
+**NEWID** is a unique identifier for each householder/survey participant
+
+**UCC** is the Universal Classification Code which identifies the type of food product or expenditure.
+
+**COST** is the actual expenditure on that item for that household during that quarter (in US dollars)
+
+**year** is the year of the expenditure
+
+**quarter** is the quarter of the year the expense was recorded
+
+-   1 = January to March
+
+-   2 = April to June
+
+-   3 = July to September
+
+-   4 = October to December
+
+```{r}
+summary(usda_expd)
+```
+
+## usda_fmli
+
+```{r}
+head(usda_fmli)
+```
+
+The original "fmli" datasets within the USDA consumer expenditure dataset had more variables, but they were extracted in another piece of code to create this version of the dataset.
+
+### Variables
+
+**NEWID** is a unique identifier for each household/survey participant.
+
+**AGE_REF** is the age of the reference person in the household (typically the primary income earner or householder).
+
+**REGION** is the geographic region code corresponding to:
+
+1 = Northeast 2 = Midwest 3 = South 4 = West
+
+**INCLASS** represents the income class or the houshold income bracket. This is represented as a two-digit code. These codes categorize households into predefined income ranges based on pretax income.
+
+**year** represents the year of the data collection
+
+**quarter** represents the quarter of the year the data was collected.
+
+```{r}
+summary(usda_fmli)
+```
+
+## CPI dataset
+
+```{r}
+head(core_inflation)
+```
+
+Core inflation is calculated through subtracting food and energy prices from the CPI, or the consumer price index. This data will be used in the project to serve as a baseline to compare against food-specific inflation.
+
+For instance if food prices are rising faster in comparison to core inflation it would signal food-specific pressures, such as pressure in supply chains.
+
+```{r}
+summary(core_inflation)
+```
+
+```{r}
+library(scales)
+
+# Convert date column to Date type (just in case it's not)
+core_inflation <- core_inflation %>%
+  mutate(observation_date = as.Date(observation_date))
+
+# Time series line plot
+ggplot(core_inflation, aes(x = observation_date, y = MEDCPIM158SFRBCLE)) +
+  geom_line(color = "steelblue", size = 1) +
+  labs(
+    title = "Core CPI Over Time",
+    subtitle = "Monthly data from 1983 to 2025",
+    x = "Year",
+    y = "Percent Change (YoY)"
+  ) +
+  scale_x_date(date_breaks = "5 years", date_labels = "%Y") +
+  theme_minimal(base_size = 14)
+```
+
+```{r}
+ggplot(core_inflation, aes(x = MEDCPIM158SFRBCLE)) +
+  geom_histogram(bins = 50, fill = "black", alpha = 0.7) +
+  labs(title = "Distribution of Core CPI")
+```
+
+As seen, the core price index data is skewed to the right which indicates that
+
+For this project I will merge this dataset with the food_prices dataset which will be the next dataset that I will introduce.
+
+## food_prices dataset
+
+```{r}
+head(food_prices)
+summary(food_prices)
+```
+
+### Variables
+
+**series_id** is the code identifying the specific item/location combo (different IDs for different food products)
+
+**year** is the year of the observation
+
+**period** is the month of the observation (e.g, M01 = January)
+
+**value** is the price in (USD) for that item in that month
+
+**item_name** indicates the name of the food item
+
+**area_name** is the title of the geographic area (in this case it is the city average)
+
+```{r}
+unique(food_prices$item_name)
+```
+
+```{r}
+library(dplyr)
+
+food_prices <- food_prices %>%
+  mutate(food_category = case_when(
+    grepl("flour|rice|spaghetti|macaroni|bread|cookies|crackers", item_name, ignore.case = TRUE) ~ "Grains & Baked Goods",
+    grepl("beef|chuck|roast|steak|rib|sirloin", item_name, ignore.case = TRUE) ~ "Beef",
+    grepl("pork|bacon|ham|sausage|frankfurters|bologna", item_name, ignore.case = TRUE) ~ "Pork",
+    grepl("chicken|turkey", item_name, ignore.case = TRUE) ~ "Poultry",
+    grepl("tuna", item_name, ignore.case = TRUE) ~ "Seafood",
+    grepl("eggs", item_name, ignore.case = TRUE) ~ "Eggs",
+    grepl("milk|cheese|yogurt|butter|margarine", item_name, ignore.case = TRUE) ~ "Dairy",
+    grepl("ice cream", item_name, ignore.case = TRUE) ~ "Frozen Desserts",
+    grepl("apple|banana|orange|grape|pear|peach|lemon|fruit|strawberry|cherry", item_name, ignore.case = TRUE) ~ "Fruits",
+    grepl("potato|lettuce|tomato|cabbage|celery|carrot|onion|pepper|cucumber|broccoli|corn|vegetable|bean", item_name, ignore.case = TRUE) ~ "Vegetables",
+    grepl("juice|cola|coffee|soft drinks|beverages|vodka|wine|beer|malt", item_name, ignore.case = TRUE) ~ "Beverages",
+    grepl("sugar|peanut butter|shortening", item_name, ignore.case = TRUE) ~ "Pantry Staples",
+    grepl("fuel|gasoline|diesel|electricity", item_name, ignore.case = TRUE) ~ "Utilities",
+    TRUE ~ "Other"
+  ))
+
+food_prices <- food_prices %>%
+  filter(year >= 2013, year <= 2023)
+
+head(food_prices)
+
+```
+
+After this code snippet I have created a more broad categorical label (**food_category**) including labels such as fruits, grains, and so on.
+
+# Final Cleaning & Data Ingestion
+
+## Merging the CPI and food_prices Dataset
+
+The reason I would like to merge these datasets together is because it would make comparison visualizations for food prices and the median core price index much easier and will save us a lot of trouble along the way.
+
+```{r}
+library(lubridate)  
+
+# Convert date to datetime format  
+core_inflation <- core_inflation %>%  
+  mutate(observation_date = ymd(observation_date))  
+
+# Create 'year' and 'period' columns  
+core_inflation <- core_inflation %>%  
+  mutate(  
+    year = year(observation_date),  
+    period = paste0("M", sprintf("%02d", month(observation_date)))  
+  ) %>%  
+  select(-observation_date) %>%  # Drop original date column  
+  filter(year >= 2013, year <= 2023)
+```
+
+The purpose of this chunk was to take the variable observation_date and create two new variables "period" and "year" which will be used to join the datasets food_prices and core)inflation in the following chunk.
+
+```{r}
+# merges data into one dataset
+food_prices <- inner_join(  
+  food_prices,  
+  core_inflation,  
+  by = c("year", "period")  
+)  
+
+  
+# gives the median CPI variable something more recognizable
+food_prices <- food_prices %>%
+  rename(med_core_price_index = MEDCPIM158SFRBCLE)
+
+head(food_prices)
+```
+
+```{r}
+# View first few rows
+head(food_prices)
+
+# Check dimensions
+dim(food_prices)
+
+# Summary statistics
+summary(food_prices)
+
+# Check for missing values
+colSums(is.na(food_prices))
+```
+
+# Exploratory Data Analysis
+
+## Core Inflation vs. Food Prices
+
+```{r}
+library(highcharter)
+
+library(dplyr)
+
+# Calculate annual averages
+df_summary <- food_prices %>%
+  # Filter for desired years (2013-2023)
+  filter(year >= 2013, year <= 2023) %>%
+  # Group by year and calculate averages
+  group_by(year) %>%
+  summarize(
+    avg_food_price = mean(value, na.rm = TRUE),
+    core_inflation = mean(med_core_price_index, na.rm = TRUE)
+  ) %>%
+  ungroup()
+
+# View resulting data
+print(df_summary)
+
+# Create Highchart
+highchart() %>%
+  hc_chart(type = "line") %>%
+  hc_title(text = "Food Prices vs Core Inflation (2013-2023)") %>%
+  hc_xAxis(title = list(text = "Year"), categories = df_summary$year) %>%
+  hc_yAxis(title = list(text = "Value")) %>%
+  hc_add_series(name = "Avg Food Price", data = df_summary$avg_food_price) %>%
+  hc_add_series(name = "Core Inflation", data = df_summary$core_inflation) %>%
+  hc_tooltip(shared = TRUE, crosshairs = TRUE, valueDecimals = 2) %>%
+  hc_legend(enabled = TRUE) %>%
+  hc_exporting(enabled = TRUE) %>%
+  hc_colors(c("turquoise", "lightgray"))
+
+```
+
+## 
