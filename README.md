@@ -1,5 +1,3 @@
-# DATA 205
-
 # DATA 205 Capstone Project: Food Inflation & Household Expenditure Analysis
 
 **Author:** Olivia Yuengling
