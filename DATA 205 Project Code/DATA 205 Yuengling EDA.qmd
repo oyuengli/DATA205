@@ -1,0 +1,270 @@
+---
+title: "DATA 205 Yuengling Exploratory Data Analysis"
+format: html
+editor: visual
+---
+
+# Exploratory Data Analysis
+
+## Core Inflation vs. Food Prices
+
+```{r}
+library(highcharter)
+
+library(dplyr)
+
+# Calculate annual averages
+df_summary <- food_prices %>%
+  # Filter for desired years (2013-2023)
+  filter(year >= 2013, year <= 2023) %>%
+  # Group by year and calculate averages
+  group_by(year) %>%
+  summarize(
+    avg_food_price = mean(value, na.rm = TRUE),
+    core_inflation = mean(med_core_price_index, na.rm = TRUE)
+  ) %>%
+  ungroup()
+
+# View resulting data
+print(df_summary)
+
+# Create Highchart
+highchart() %>%
+  hc_chart(type = "line") %>%
+  hc_title(text = "Food Prices vs Core Inflation (2013-2023)") %>%
+  hc_xAxis(title = list(text = "Year"), categories = df_summary$year) %>%
+  hc_yAxis(title = list(text = "Value")) %>%
+  hc_add_series(name = "Avg Food Price", data = df_summary$avg_food_price) %>%
+  hc_add_series(name = "Core Inflation", data = df_summary$core_inflation) %>%
+  hc_tooltip(shared = TRUE, crosshairs = TRUE, valueDecimals = 2) %>%
+  hc_legend(enabled = TRUE) %>%
+  hc_exporting(enabled = TRUE) %>%
+  hc_colors(c("turquoise", "lightgray"))
+
+```
+
+## Seasonal Analysis
+
+```{r}
+# Clean data and visualize
+food_prices %>%
+  # Remove corrupted categories and irrelevant "Other"
+  filter(!str_detect(food_category, "Jaflebla"),
+         food_category != "Other") %>%
+  # Convert period to numeric month
+  mutate(month = as.numeric(str_remove(period, "M"))) %>%
+  # Calculate monthly averages
+  group_by(food_category, month) %>%
+  summarise(avg_price = mean(value, na.rm = TRUE)) %>%
+  # Create visualization
+  ggplot(aes(x = month, y = avg_price)) +
+  geom_line(color = "#2c7da0", linewidth = 0.8) +
+  geom_point(color = "#012a4a", size = 1.5) +
+  facet_wrap(~food_category, scales = "free_y", ncol = 4) +
+  scale_x_continuous(
+    breaks = c(1, 4, 7, 10),
+    labels = c("Jan", "Apr", "Jul", "Oct")
+  ) +
+  labs(
+    title = "Seasonal Price Patterns by Category (2013-2023)",
+    subtitle = "Monthly averages in USD",
+    x = NULL,
+    y = "Average Price"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text = element_text(size = 8),
+    strip.text = element_text(size = 9, face = "bold"),
+    panel.grid.minor = element_blank(),
+    plot.title = element_text(size = 14, margin = margin(b = 10)),
+    plot.subtitle = element_text(size = 10, color = "gray40")
+  ) +
+  scale_y_continuous(labels = scales::dollar_format())
+```
+
+## Lagged Inflation Effects
+
+```{r}
+# Top 10% inflation years
+high_inflation <- food_prices %>%
+  group_by(year) %>%
+  summarise(core_inflation = mean(med_core_price_index)) %>%
+  filter(core_inflation >= quantile(core_inflation, 0.9))
+
+# Category deviations during high inflation
+food_prices %>%
+  filter(year %in% high_inflation$year) %>%
+  group_by(food_category) %>%
+  summarise(price_deviation = mean(value - med_core_price_index)) %>%
+  ggplot(aes(x = reorder(food_category, price_deviation), y = price_deviation)) +
+  geom_col(fill = "#88B04B") +
+  coord_flip() +
+  labs(title = "Price Deviations During High Inflation Years",
+       x = "", y = "Deviation from Core Inflation") +
+  theme_minimal()
+```
+
+## Food Price Statistics
+
+```{r}
+# Category price statistics (rounded with $)
+food_prices %>%
+  group_by(food_category) %>%
+  summarise(
+    avg_price = mean(value, na.rm = TRUE),
+    price_sd = sd(value, na.rm = TRUE),
+    min_price = min(value, na.rm = TRUE),
+    max_price = max(value, na.rm = TRUE)
+  ) %>%
+  mutate(across(avg_price:max_price, 
+                ~ scales::dollar(.x, accuracy = 0.01))) %>%
+  knitr::kable(caption = "Food Category Price Summary (2013-2023)")
+```
+
+```{r}
+# Summarize the data
+heatmap_data <- food_prices %>%
+  group_by(year, food_category) %>%
+  summarise(avg_price = mean(value, na.rm = TRUE)) %>%
+  ungroup()
+
+# Plot with magma palette
+ggplot(heatmap_data, aes(
+  x = factor(year),
+  y = fct_reorder(food_category, -avg_price),
+  fill = avg_price
+)) +
+  geom_tile(color = "white", linewidth = 0.3) +
+  scale_fill_viridis(
+    name = "Avg Price ($)",
+    option = "magma",
+    direction = -1 # dark = high price
+  ) +
+  labs(
+    title = "🔥 Average Food Price per Category by Year (2013–2023)",
+    x = "Year",
+    y = "Food Category"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid = element_blank(),
+    plot.title = element_text(face = "bold", size = 16)
+  )
+
+
+
+```
+
+```{r}
+food_range <- food_prices %>%
+  group_by(food_category) %>%
+  summarise(
+    min_price = min(value, na.rm = TRUE),
+    max_price = max(value, na.rm = TRUE),
+    avg_price = mean(value, na.rm = TRUE)
+  )
+
+ggplot(food_range, aes(x = reorder(food_category, avg_price))) +
+  geom_linerange(aes(ymin = min_price, ymax = max_price), color = "lightskyblue2", size = 2) +
+  geom_point(aes(y = avg_price), color = "steelblue3", size = 3) +
+  coord_flip() +
+  labs(title = "Price Range by Food Category (Min–Max with Avg)",
+       x = "Food Category",
+       y = "Price ($)") +
+  theme_minimal()
+
+```
+
+```{r}
+library(ggplot2)
+
+# remove $ formatting before plotting
+food_summary <- food_prices %>%
+  group_by(food_category) %>%
+  summarise(
+    avg_price = mean(value, na.rm = TRUE),
+    price_sd = sd(value, na.rm = TRUE)
+  )
+
+ggplot(food_summary, aes(x = reorder(food_category, avg_price), y = avg_price)) +
+  geom_col(fill = "steelblue") +
+  coord_flip() +
+  labs(title = "Average Food Prices by Category (2013–2023)",
+       x = "Food Category",
+       y = "Average Price ($)") +
+  theme_minimal()
+
+
+```
+
+## CEX Data EDA
+
+```{r}
+cex_data <- read_csv("C:/Users/omyue/OneDrive/Desktop/DATA 205/U.S. Bureau of Labor Statistics – Consumer Expenditure Surveys (CE)/income_group_annual_food_spend.csv")
+```
+
+```{r}
+# Creates a visualization seeing the spending for different food related expenditures
+spend_plot <- ggplot(annual_food_spend, aes(x = year)) +
+  geom_line(aes(y = mean_grocery_spend, color = "Groceries"), linewidth = 1) +
+  geom_line(aes(y = mean_dining_spend, color = "Dining Out"), linewidth = 1) +
+  geom_line(aes(y = mean_school_lunch_spend, color = "School Lunch"), linewidth = 1) +
+  geom_line(aes(y = mean_total_food_spend, color = "Total Food"), linewidth = 1.5) +
+  scale_color_manual(
+    values = c(
+      "Groceries" = "forestgreen",
+      "Dining Out" = "darkred",
+      "School Lunch" = "orange",
+      "Total Food" = "navy"
+    )
+  ) +
+  labs(
+    title = "Annual Average Food Spending (2013-2023)",
+    subtitle = "Consumer Expenditure Survey Data",
+    x = "Year",
+    y = "Average Annual Spending ($)",
+    color = "Category"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+print(spend_plot)
+```
+
+## Distribution of Food Expenditure by Class
+
+```{r}
+cex_data <- read_csv("C:/Users/omyue/OneDrive/Desktop/DATA 205/U.S. Bureau of Labor Statistics – Consumer Expenditure Surveys (CE)/income_group_annual_food_spend.csv")
+
+# Ensure income_group is a factor with proper ordering
+cex_data <- cex_data %>%
+  mutate(income_group = factor(income_group, levels = c(
+    "Under $5,000",
+    "$5,000 to $9,999",
+    "$10,000 to $14,999",
+    "$15,000 to $19,999",
+    "$20,000 to $29,999",
+    "$30,000 to $39,999",
+    "$40,000 to $49,999",
+    "$50,000 to $69,999",
+    "$70,000 and over"
+  )))
+
+# Create a  plot
+ggplot(cex_data, aes(x = income_group, y = mean_total_food_spend)) +
+  geom_col(fill = "steelblue") +
+  scale_y_continuous(labels = dollar) +
+  labs(
+    title = "Average Total Food Spending by Income Group",
+    x = "Income Group",
+    y = "Average Total Food Spending"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+    panel.grid.minor = element_blank()
+  )
+
+  )
+```

@@ -1,0 +1,300 @@
+# DATA 205 Analyses
+
+## Which food categories (meats, dairy, cereals) show the largest deviations from the overall food price index during high-inflation years (top 25 percent of annual inflation rates)?
+
+This question aims to address which food categories have become the least affordable during inflation spikes. This aligns with the project's goal to understand how price surges burdens low-income households.
+
+We will aim to isolate food categories with high-deviation categories, and show what foods families are forced to cut back spending on or what foods they would substitute/buy more of.
+
+First, we will identify the years who have the top
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+# Compute one summary row per year
+yearly_summary <- food_prices %>%
+  group_by(year) %>%
+  summarize(
+    avg_food_price = mean(value,               na.rm = TRUE),
+    avg_core_inflation = mean(med_core_price_index, na.rm = TRUE)
+  )
+
+# Find the cutoff for the top 25% of avg_food_price
+price_cutoff <- quantile(yearly_summary$avg_food_price, 0.75)
+
+# Select the years above that cutoff
+high_inflation_years <- yearly_summary %>%
+  filter(avg_food_price >= price_cutoff) %>%
+  pull(year)
+
+high_inflation_years
+
+```
+
+So after executing this code we have identified the years with the top 25 percent of inflation as 2021, 2022, 2023. Interestingly enough, many people have observed a surge in prices post COVID-19 which took place during those years.
+
+In the following chunk of code, we can calulate and display the deviations as a dataframe for each food category for just those three years.
+
+```{r}
+
+# Calculate deviations
+category_deviations <- food_prices %>%
+  filter(year %in% high_inflation_years) %>%
+  group_by(food_category) %>%
+  summarise(
+    avg_food_price = mean(value, na.rm = TRUE),
+    avg_core_price = mean(food_prices$value[food_prices$year %in% high_inflation_years], na.rm = TRUE),
+    .groups = 'drop'
+  ) %>%
+  mutate(price_deviation = avg_food_price - avg_core_price)
+
+# Print results
+print(category_deviations)
+```
+
+And now since we are equipped with that information, we can now create a visualization to understand which food categories are more prone to strong price deviations during high inflation.
+
+But first let's set up our common theme for the visualizations.
+
+```{r}
+theme_food <- function() {
+  theme_minimal(base_family = "serif") +    # ← set base_family here
+    theme(
+      text            = element_text(family = "serif", color = "#6D6875"),
+      plot.title      = element_text(family = "serif", size = 14, face = "bold", hjust = 0.5),
+      plot.subtitle   = element_text(family = "serif", size = 11, color = "#B5838D"),
+      plot.caption    = element_text(family = "serif", size = 9, color = "#B5838D"),
+      axis.title      = element_text(family = "serif", size = 11, face = "bold"),
+      axis.text       = element_text(family = "serif", size = 10),
+      legend.title    = element_text(family = "serif", size = 9, face = "bold"),
+      legend.text     = element_text(family = "serif", size = 7),
+      strip.text      = element_text(family = "serif", face = "bold"),
+      legend.position = "bottom",
+      panel.grid.minor  = element_blank(),
+      panel.grid.major  = element_line(color = "#F8F0E8"),
+      panel.background  = element_rect(fill = "#FFFFFF", color = NA),
+      plot.background   = element_rect(fill = "#FFFFFF", color = NA)
+    )
+}
+```
+
+And now we can implement our first visualization!
+
+```{r}
+# Create a column to specify color based on deviation direction
+category_deviations <- category_deviations %>%
+  mutate(deviation_type = ifelse(price_deviation >= 0, "Above", "Below"))
+
+# Visualize with color-coded bars
+ggplot(category_deviations, 
+       aes(x = reorder(food_category, -price_deviation), 
+           y = price_deviation,
+           fill = deviation_type)) +
+  geom_col() +
+  scale_fill_manual(values = c("Above" = "#FFCDB2", "Below" = "#E5989B")) +
+  labs(
+    title = "Food Price Trends During High Inflation (2021–2023)",
+    subtitle = "Top 25% Price Deviations from Average",
+    x = "Food Category",
+    y = "Deviation from Overall Average Price (USD)",
+    fill = "Deviation"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "top")
+```
+
+So now that we have created a visualization, let's take a deeper look into it.
+
+This graph helps us understand how inflation affects different food prices. We can observe that inflation doesn't raise all prices equally. Some food items might become much more expensive, while others stay relatively stable or even become cheaper compared to everything else.
+
+In this case, we can see that beef prices has significantly higher prices than other types of food during high inflation. On the other hand, the prices of grains, baked goods, and pantry staples didn't rise as much; they were actually lower than the average food price increase.
+
+Now you may be asking: Why is this important?
+
+This information is actually pretty important for a few reasons:
+
+For consumers, it helps people understand how their grocery bills might change during periods of high inflation. If you eat a lot of beef, you'll likely feel the impact of inflation more than someone who eats mostly grains or pantry staples. For policymakers, it can help governments and other organizations understand which food prices are rising the most and why. This can help them make decisions about how to address the effects of inflation. For businesses: It can help food producers and sellers make decisions about pricing and which products to focus on. In short, this graph provides a clear picture of how different food prices behave during periods of high inflation, which has important implications for people, governments, and businesses.
+
+# Is creating a model based on the food expenditure viable?
+
+## Creating a Correlation Matrix
+
+We will be trying to understand if the variable MeanTotalFoodSpend can be predicted through other variables in the dataset. First, we need to create a correlation matrix to create a model.
+
+```{r}
+# Load required packages
+library(dplyr)
+library(ggplot2)
+library(reshape2)  # For melting the correlation matrix
+
+# Select only numerical variables
+numerical_data <- expenditure_data %>% select_if(is.numeric)
+
+# Check for missing values (optional)
+sum(is.na(numerical_data))
+
+# Remove rows with missing values if needed
+numerical_data <- na.omit(numerical_data)
+
+# Calculate correlation matrix
+cor_matrix <- cor(numerical_data, use = "complete.obs")  # Handles missing values
+
+# Print correlation matrix
+print(cor_matrix)
+
+# Alternative visualization using corrplot package
+# install.packages("corrplot")  # Uncomment if needed
+library(corrplot)
+corrplot(cor_matrix, method = "color", type = "upper", 
+         tl.col = "black", tl.srt = 45, 
+         addCoef.col = "black", number.cex = 0.7,
+         diag = FALSE)
+```
+So as we can see here some of the variables with the strongest relationships with MeanGrocerySpend are MeanDiningOutSpend, MeanSchoolLunchSpend (with the strongest relationship), and MeanTotalFoodSpend. 
+
+To observe if these variables can predict the grocery expenditure we can take a look by creating a baseline model. 
+
+
+## Creating the baseline model
+
+```{r}
+# Linear regression model
+model <- lm(MeanGrocerySpend ~ MeanDiningOutSpend + MeanSchoolLunchSpend + MeanTotalFoodSpend + n_households, data = expenditure_data)
+
+# Summary of the regression
+summary(model)
+```
+
+The results of the regression model indicate that MeanDiningOutSpend, MeanSchoolLunchSpend, MeanTotalFoodSpend, and n_households all significantly influence MeanGrocerySpend. Specifically, MeanDiningOutSpend and MeanSchoolLunchSpend have negative relationships with grocery spending, suggesting that as dining out or school lunch spending increases, grocery spending tends to decrease. 
+
+In contrast, MeanTotalFoodSpend has a positive relationship, meaning higher overall food spending is associated with higher grocery spending. Additionally, the number of households (n_households) also positively influences grocery spending, indicating that larger households tend to spend more on groceries. 
+
+Overall, the model explains a significant portion of the variability in grocery spending (83.5%), and all significant predictors except for the intercept show reasonable statistical significance.
+
+Although the model does have a good fit, logically putting it could it really be reasonable? Can the number of households within a certain income group actually predict an individual's expenditure on groceries? 
+
+Let's try and create another model which takes away MeanTotalFoodSpend and n_households so the model can try and predict if spending behaviors on other types of food services have an impact on the expenditure on groceries.
+
+```{r}
+# Linear regression model
+model2 <- lm(MeanGrocerySpend ~ MeanDiningOutSpend + MeanSchoolLunchSpend, data = expenditure_data)
+
+# Summary of the regression
+summary(model2)
+```
+I decided to focus the model by removing variables like MeanTotalFoodSpend and n_households, and just looked at MeanDiningOutSpend and MeanSchoolLunchSpend as predictors of grocery spending. The reasoning was that spending on dining out and school lunches are directly related to food, so they’re better indicators of grocery spending than broader factors like the number of households in an income group.
+
+The results show that both MeanDiningOutSpend and MeanSchoolLunchSpend have a strong impact on grocery spending. MeanDiningOutSpend has a positive effect—people who spend more on dining out also tend to spend more on groceries. On the other hand, MeanSchoolLunchSpend has a negative effect—higher school lunch spending tends to reduce grocery spending. Both relationships are statistically significant with very low p-values.
+
+The model is doing well with an R-squared of 0.7839, meaning it explains about 78% of the variation in grocery spending. The Adjusted R-squared (0.7737) tells me the model is solid and not overfitting. The overall model is statistically significant, so this is a good way to predict grocery spending.
+
+In the end, this focused model makes more sense and is easier to understand. It’s based on spending habits that actually affect grocery bills, and the results show that dining out and school lunch spending are key predictors.
+
+# Predicting the 
+
+```{r}
+# Growth In Food Expenditure Heatmap
+
+# Calculate year-over-year percentage change in total food spending
+growth_data <- expenditure_data %>%
+  arrange(IncomeGroup, year) %>%
+  group_by(IncomeGroup) %>%
+  mutate(
+    PrevYearSpend = lag(MeanGroceryFoodSpend, 1),
+    GrowthRate = (MeanTotalFoodSpend - PrevYearSpend) / PrevYearSpend * 100
+  ) %>%
+  filter(!is.na(GrowthRate))
+
+# Create the heatmap with our custom palette
+growth_heatmap <- ggplot(growth_data,
+                         aes(x = year, y = IncomeGroup, fill = GrowthRate)) +
+  geom_tile(color = "white", size = 0.5) +
+  scale_fill_gradient2(
+    low = "#6D6875",
+    mid = "white",
+    high = "#FFB4A2",
+    midpoint = 0,
+    labels = function(x) paste0(round(x), "%")
+  ) +
+  labs(
+    title = "Year-over-Year Growth in Food Expenditure",
+    subtitle = "Percentage change in total food spending by income group",
+    x = "Year",
+    y = NULL,
+    fill = "Growth Rate",
+    caption = "Grey indicates decline, pink indicates growth"
+  ) +
+  theme_food() +
+  theme(
+    panel.grid = element_blank(),
+    axis.text.y = element_text(size = 10)
+  )
+
+growth_heatmap
+```
+his heatmap visualizes the year-over-year percentage change in total food expenditure across different income groups from 2014 to 2017. Each row represents an income bracket, while each column represents a year. The color intensity of each cell indicates the magnitude and direction of the change in spending compared to the previous year: pink shades signify an increase (growth), with darker pink indicating a larger percentage increase, while grey shades represent a decrease (decline), with darker grey indicating a larger percentage decrease. White or lighter shades suggest minimal change. 
+
+By observing the color patterns across income groups and years, we can identify which income segments experienced the most significant growth or decline in their food spending annually and how these trends evolved over the four-year period. Notably, in the year 2015 many of the lower income groups experienced growth in food expenditures.
+
+We can see through this graph that the expenditure growth rate is not always going the be the same for each income group. 
+
+```{r}
+aov.all <- aov(GrowthRate ~ IncomeGroup, data = growth_data)
+summary (aov.all)
+```
+Considering the heatmap showing year-over-year food expenditure growth by income group and the subsequent ANOVA analysis, the lack of a statistically significant difference in growth rates across income brackets over those four years (as indicated by the high p-value of 0.589) suggests that, within this limited timeframe, changes in food spending from one year to the next weren't strongly tied to income level. 
+
+While the heatmap hinted at some visual variations in growth, the ANOVA indicates these differences weren't substantial enough to be considered statistically significant for the sample observed. However, the crucial point made about the small 4-year window of data serves as a major caveat, implying that these findings might not reflect longer-term trends or broader population behavior. A more extensive dataset would be necessary to draw more reliable conclusions about the relationship between income and changes in food expenditure over time.
+
+```{r}
+# Define a simpler custom color palette
+custom_palette <- c("#FFCDB2", "#FFB4A2", "#E5989B", "#B5838D", "#6D6875")
+
+ggplot(growth_data, aes(x = IncomeGroup, y = GrowthRate)) +
+  # Add jittered points for visibility
+  geom_jitter(
+    width = 0.2, 
+    alpha = 0.5, 
+    color = "#6D6875", 
+    size = 1.8
+  ) +
+  # Add boxplots with gradient fill based on median values
+  geom_boxplot(
+    aes(fill = after_stat(middle)), 
+    alpha = 0.6,
+    color = "#6D6875",
+    outlier.shape = NA
+  ) +
+  # Gradient color scale
+  scale_fill_gradientn(colors = custom_palette, guide = "none") +
+  # Horizontal line at 0
+  geom_hline(yintercept = 0, linetype = "dashed", color = "#6D6875") +
+  # Labels
+  labs(
+    title = "Food Expenditure Growth by Income Group (2013–2017)",
+    subtitle = "Percentage change in household food spending",
+    x = "Income Group",
+    y = "Growth Rate (%)",
+    caption = "Source: BLS Household Expenditure Survey 2013–2017"
+  ) +
+  # Minimal theme styling
+  theme_minimal(base_family = "serif") +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 11, hjust = 0.5),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    axis.title = element_text(face = "bold"),
+    panel.grid.major.x = element_blank()
+  )
+
+```
+This boxplot illustrates the distribution of year-over-year food expenditure growth rates for different income groups from 2013 to 2017. It reveals the central tendency, spread, and outliers in these growth rates for each income segment. Lower to middle-income groups generally show a wider range of growth rates, indicating more variability in their annual food spending changes compared to higher-income groups.
+
+In contrast, higher-income groups exhibit more compressed growth rate distributions, typically closer to zero. Notably, the highest income bracket even suggests a tendency towards stable or slightly decreasing food expenditure during this period. The outliers highlight specific instances of significant year-over-year changes within certain income groups.
+
+In the context of previous analysis showing no significant difference in average growth rates across incomes (for a slightly different period), this boxplot emphasizes the substantial variability within each income group. While average growth might be similar, the stability of food expenditure changes year to year differs, with lower to middle-income households experiencing more fluctuation than their higher-income counterparts.
+
+## Takeaways
+
