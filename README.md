@@ -37,7 +37,6 @@ Ultimately, we identify who bears the brunt of food inflation and which items th
 │   ├── figures/             # PNGs of key plots
 │   ├── final_report.pdf     # Written report
 │   └── presentation.pptx    # Slide deck
-└── dashboards/              # (Optional) Tableau or Shiny assets
 ```
 
 ---
