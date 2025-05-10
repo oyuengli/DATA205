@@ -23,12 +23,12 @@ Ultimately, we identify who bears the brunt of food inflation and which items th
 
 ```
 ├── README.md               # Project overview and instructions
-├── data/                    # Raw and processed data files
+├── Data Files/                    # Raw and processed data files
 │   ├── core_inflation_1983-2025.csv
 │   ├── average_prices.csv
 │   ├── combined_interview_data.csv
 │   └── food_expenditure_summary.csv
-├── R/                       # R scripts and functions
+├── DATA 205 Project Code          # R and Python scripts and functions
 │   ├── 01_data_ingestion.R  # Data loading & cleaning functions
 │   ├── 02_EDA.Rmd           # Exploratory Data Analysis (R Markdown)
 │   ├── 03_analysis.Rmd      # Statistical tests & modeling
@@ -47,6 +47,7 @@ Ultimately, we identify who bears the brunt of food inflation and which items th
 ### Prerequisites
 
 * R (>= 4.0)
+* Python (>= 3.10)
 * RStudio (recommended)
 * Packages: tidyverse, ggplot2, highcharter, viridis, lubridate, corrplot
 
