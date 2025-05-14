@@ -4,15 +4,60 @@ format: html
 editor: visual
 ---
 
-# Exploratory Data Analysis
+Exploratory Data Analysis
 
-## Core Inflation vs. Food Prices
+Core Inflation vs. Food Prices
 
-```{r}
+{r}
 library(highcharter)
-
 library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(scales)
+library(viridis)
+library(readr)
 
+# Setting up the General Theme for Visualizations
+
+# Define the custom color palette
+custom_palette <- c("#FFCDB2", "#FFB4A2", "#E5989B", "#B5838D", "#6D6875")
+
+# Create a function to generate more colors if needed
+extend_palette <- function(palette, n) {
+  if (n <= length(palette)) {
+    return(palette[1:n])
+  } else {
+    # Use colorRampPalette to extend the palette if needed
+    colorRampPalette(palette)(n)
+  }
+}
+
+# Creates a function that generates extra colors if more are needed (w/ assistance of Claude)
+theme_food <- function() {
+  theme_minimal() +
+    theme(
+      text            = element_text(family = "serif", color = "#6D6875"),
+      plot.title      = element_text(family = "serif", size = 14, face = "bold", hjust = 0.5),
+      plot.subtitle   = element_text(family = "serif", size = 11, color = "#B5838D"),
+      plot.caption    = element_text(family = "serif", size = 9, color = "#B5838D"),
+      axis.title      = element_text(family = "serif", size = 11, face = "bold"),
+      axis.text       = element_text(family = "serif", size = 10),
+      legend.title    = element_text(family = "serif", size = 9, face = "bold"),
+      legend.text     = element_text(family = "serif", size = 7),
+      legend.position = "bottom",
+      panel.grid.minor  = element_blank(),
+      panel.grid.major  = element_line(color = "#F8F0E8"),
+      panel.background  = element_rect(fill = "#FFFFFF", color = NA),
+      plot.background   = element_rect(fill = "#FFFFFF", color = NA)
+    )
+}
+
+
+
+# Create a directory for saving plots if it doesn't exist
+dir.create("food_expenditure_plots", showWarnings = FALSE)
+
+{r}
 # Calculate annual averages
 df_summary <- food_prices %>%
   # Filter for desired years (2013-2023)
@@ -25,9 +70,6 @@ df_summary <- food_prices %>%
   ) %>%
   ungroup()
 
-# View resulting data
-print(df_summary)
-
 # Create Highchart
 highchart() %>%
   hc_chart(type = "line") %>%
@@ -39,13 +81,16 @@ highchart() %>%
   hc_tooltip(shared = TRUE, crosshairs = TRUE, valueDecimals = 2) %>%
   hc_legend(enabled = TRUE) %>%
   hc_exporting(enabled = TRUE) %>%
-  hc_colors(c("turquoise", "lightgray"))
+  hc_colors(c("#E5989B", "lightgray"))
 
-```
 
-## Seasonal Analysis
+This chart computes and overlays the annual average food price against core CPI from 2013–2023, letting us see at a glance whether food‐specific inflation is outpacing the broader basket.
 
-```{r}
+Seasonal Analysis
+
+Food prices often fluctuate with the seasons due to supply cycles, holidays, and demand shifts. This panel plot breaks down average prices by month across categories, helping to reveal recurring seasonal patterns that may inform consumers and policymakers.
+
+{r}
 # Clean data and visualize
 food_prices %>%
   # Remove corrupted categories and irrelevant "Other"
@@ -58,105 +103,61 @@ food_prices %>%
   summarise(avg_price = mean(value, na.rm = TRUE)) %>%
   # Create visualization
   ggplot(aes(x = month, y = avg_price)) +
-  geom_line(color = "#2c7da0", linewidth = 0.8) +
-  geom_point(color = "#012a4a", size = 1.5) +
+  geom_line(color = "#E5989B", linewidth = 0.8) +
+  geom_point(color = "#E5989B", size = 1.5) +
   facet_wrap(~food_category, scales = "free_y", ncol = 4) +
   scale_x_continuous(
     breaks = c(1, 4, 7, 10),
     labels = c("Jan", "Apr", "Jul", "Oct")
   ) +
   labs(
-    title = "Seasonal Price Patterns by Category (2013-2023)",
+    title = "Seasonal Price Patterns by Category (2013–2023)",
     subtitle = "Monthly averages in USD",
     x = NULL,
     y = "Average Price"
   ) +
   theme_minimal() +
   theme(
+    text = element_text(family = "serif"),
     axis.text = element_text(size = 8),
-    strip.text = element_text(size = 9, face = "bold"),
+    strip.text = element_text(size = 8, face = "bold"),
     panel.grid.minor = element_blank(),
     plot.title = element_text(size = 14, margin = margin(b = 10)),
     plot.subtitle = element_text(size = 10, color = "gray40")
   ) +
   scale_y_continuous(labels = scales::dollar_format())
-```
 
-## Lagged Inflation Effects
 
-```{r}
-# Top 10% inflation years
-high_inflation <- food_prices %>%
+Here we convert the “M01…M12” period codes into numeric months, then compute monthly average prices for each food category. The faceted line chart that follows exposes clear seasonal peaks and troughs—insight that could guide everything from inventory planning to policy timing (such as when to boost food assistance).
+
+Lagged Inflation Effects
+
+First, we pull out the top 25% of years by core inflation. Then, for those shock years, we measure how much each food category’s price diverged from the baseline CPI. This bar chart highlights which categories (like meat or dairy) are most sensitive when inflation spikes, suggesting where consumers feel the pinch first.
+
+{r}
+# Top 25% inflation years
+high_inf_years <- food_prices %>%
   group_by(year) %>%
-  summarise(core_inflation = mean(med_core_price_index)) %>%
-  filter(core_inflation >= quantile(core_inflation, 0.9))
+  summarise(core=mean(med_core_price_index)) %>%
+  filter(core>=quantile(core,0.75)) %>%
+  pull(year)
 
-# Category deviations during high inflation
 food_prices %>%
-  filter(year %in% high_inflation$year) %>%
+  filter(year %in% high_inf_years) %>%
   group_by(food_category) %>%
-  summarise(price_deviation = mean(value - med_core_price_index)) %>%
-  ggplot(aes(x = reorder(food_category, price_deviation), y = price_deviation)) +
-  geom_col(fill = "#88B04B") +
-  coord_flip() +
-  labs(title = "Price Deviations During High Inflation Years",
-       x = "", y = "Deviation from Core Inflation") +
-  theme_minimal()
-```
+  summarise(dev=mean(value - med_core_price_index)) %>%
+  ggplot(aes(reorder(food_category,dev),dev)) +
+    geom_col(fill="#E5989B") +
+    coord_flip() +
+    labs(title="Deviation from Core Inflation\nin High‑Inflation Years",
+         x=NULL, y="Price – Core CPI") +
+    theme_food()
 
-## Food Price Statistics
+Price Range by Food Category
 
-```{r}
-# Category price statistics (rounded with $)
-food_prices %>%
-  group_by(food_category) %>%
-  summarise(
-    avg_price = mean(value, na.rm = TRUE),
-    price_sd = sd(value, na.rm = TRUE),
-    min_price = min(value, na.rm = TRUE),
-    max_price = max(value, na.rm = TRUE)
-  ) %>%
-  mutate(across(avg_price:max_price, 
-                ~ scales::dollar(.x, accuracy = 0.01))) %>%
-  knitr::kable(caption = "Food Category Price Summary (2013-2023)")
-```
+By grouping over the entire 2013–2023 window, this code finds each category’s minimum, maximum, and average price. The linerange plus point plot neatly summarizes volatility (span) alongside central tendency, so you can spot which items are consistently stable (e.g. pantry staples) versus wildly variable (e.g. beef).
 
-```{r}
-# Summarize the data
-heatmap_data <- food_prices %>%
-  group_by(year, food_category) %>%
-  summarise(avg_price = mean(value, na.rm = TRUE)) %>%
-  ungroup()
-
-# Plot with magma palette
-ggplot(heatmap_data, aes(
-  x = factor(year),
-  y = fct_reorder(food_category, -avg_price),
-  fill = avg_price
-)) +
-  geom_tile(color = "white", linewidth = 0.3) +
-  scale_fill_viridis(
-    name = "Avg Price ($)",
-    option = "magma",
-    direction = -1 # dark = high price
-  ) +
-  labs(
-    title = "🔥 Average Food Price per Category by Year (2013–2023)",
-    x = "Year",
-    y = "Food Category"
-  ) +
-  theme_minimal(base_size = 13) +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    panel.grid = element_blank(),
-    plot.title = element_text(face = "bold", size = 16)
-  )
-
-
-
-```
-
-```{r}
+{r}
 food_range <- food_prices %>%
   group_by(food_category) %>%
   summarise(
@@ -166,105 +167,194 @@ food_range <- food_prices %>%
   )
 
 ggplot(food_range, aes(x = reorder(food_category, avg_price))) +
-  geom_linerange(aes(ymin = min_price, ymax = max_price), color = "lightskyblue2", size = 2) +
-  geom_point(aes(y = avg_price), color = "steelblue3", size = 3) +
+  geom_linerange(aes(ymin = min_price, ymax = max_price), color = "#E5989B", size = 2) +
+  geom_point(aes(y = avg_price), color = "#B5838D", size = 3) +
   coord_flip() +
   labs(title = "Price Range by Food Category (Min–Max with Avg)",
        x = "Food Category",
        y = "Price ($)") +
   theme_minimal()
 
-```
 
-```{r}
-library(ggplot2)
+Through this visualization, we can see that beef and beverage products have the widest range for food prices (longer line = wider price range). Some of the foods that have the smallest ranges are pantry staples and seafood (shorter line = smaller price range).
 
-# remove $ formatting before plotting
-food_summary <- food_prices %>%
-  group_by(food_category) %>%
-  summarise(
-    avg_price = mean(value, na.rm = TRUE),
-    price_sd = sd(value, na.rm = TRUE)
-  )
+Consumer Expenditure Survey EDA
 
-ggplot(food_summary, aes(x = reorder(food_category, avg_price), y = avg_price)) +
-  geom_col(fill = "steelblue") +
+Now we will move on to exploring some of the data from the CES datasets by creating some visualizations. Let's start off by loading up the dataset into our environment.
+
+Distribution of Food Expenditure by Class
+
+Now we're going to go and rename the summary_data (from the beginning of this markdown) to expenditure_data for more detailed naming.
+
+{r}
+# Create a consistent name for the dataset throughout the script
+expenditure_data <- summary_data
+
+Additional Cleaning for Visualization Purposes
+
+These few lines drop any “Unknown” income groups, enforce a 2017 Q3 cutoff for completeness (the income recording data stops after that point), and filter to only those years where every income bracket appears. That way, our income‑group comparisons remain apples‑to‑apples—no misleading dips from missing data.
+
+{r}
+
+# Remove NA income group
+expenditure_data <- expenditure_data %>%
+  filter(!is.na(IncomeGroup) & IncomeGroup != "Unknown")
+
+# Handle the 2017 Q3 cutoff - filter to include only data up to 2017 Q3
+# Assuming your data has year as numeric. If it includes quarters, modify accordingly
+expenditure_data <- expenditure_data %>%
+  filter(year <= 2017.75) # Adjust this cutoff as needed for your data format
+
+# Find years with complete data for all income groups
+complete_years <- expenditure_data %>%
+  group_by(year) %>%
+  summarise(n_groups = n_distinct(IncomeGroup)) %>%
+  filter(n_groups == max(n_groups)) %>%
+  pull(year)
+
+# Filter to include only complete years
+expenditure_data <- expenditure_data %>%
+  filter(year %in% complete_years)
+
+# Ensure IncomeGroup is ordered properly for plotting
+expenditure_data <- expenditure_data %>%
+  mutate(IncomeGroup = factor(IncomeGroup,
+                              levels = c("Less than $5,000", "$5,000 to $9,999",
+                                         "$10,000 to $14,999", "$15,000 to $19,999",
+                                         "$20,000 to $29,999", "$30,000 to $39,999",
+                                         "$40,000 to $49,999", "$50,000 to $69,999",
+                                         "$70,000 and over")))
+
+Here we compute the ratio of dining‑out spend to grocery spend by income group and year. The resulting trend lines show how dining out has grown (or shrunk) relative to groceries, a proxy for changing consumer behavior and discretionary spending power.
+
+We reshape our expenditure data into “long” format so that groceries, dining out, and school meals stack in a single bar per group. Faceting by year then gives a quick visual of how spending mixes shift over time, like whether families are allocating more to groceries versus eating out.
+
+{r}
+# Spending composition by year
+
+# Reshape the data for stacked bar charts
+spending_data <- expenditure_data %>%
+  select(year, IncomeGroup, MeanGrocerySpend, MeanDiningOutSpend, MeanSchoolLunchSpend) %>%
+  pivot_longer(
+    cols = c(MeanGrocerySpend, MeanDiningOutSpend, MeanSchoolLunchSpend),
+    names_to = "SpendCategory",
+    values_to = "Amount"
+  ) %>%
+  mutate(SpendCategory = case_when(
+    SpendCategory == "MeanGrocerySpend" ~ "Groceries",
+    SpendCategory == "MeanDiningOutSpend" ~ "Dining Out",
+    SpendCategory == "MeanSchoolLunchSpend" ~ "School Meals"
+  ))
+
+# Define category colors using our palette
+category_colors <- c("Groceries" = "#E5989B", 
+                    "Dining Out" = "#FFCDB2", 
+                    "School Meals" = "#6D6875")
+
+# Get unique years from the filtered data
+years <- sort(unique(expenditure_data$year))
+
+# Create a stacked bar chart for each year
+spending_composition_plots <- list()
+
+for (yr in years) {
+  # Filter data for the current year
+  year_data <- spending_data %>% filter(year == yr)
+  
+  # Create the stacked bar chart for this year
+  plot <- ggplot(year_data,
+                 aes(x = IncomeGroup,
+                     y = Amount, fill = SpendCategory)) +
+    geom_bar(stat = "identity", position = "stack", width = 0.7) +
+    scale_y_continuous(labels = dollar_format()) +
+    scale_fill_manual(values = category_colors) +
+    coord_flip() +
+    labs(
+      title = paste("Food Expenditure Composition (", yr, ")", sep = ""),
+      subtitle = "Breakdown of average spending on groceries, dining out, and school meals",
+      x = NULL,
+      y = "Average Annual Expenditure",
+      fill = "Spending Category"
+    ) +
+    theme_food()
+  
+  # Display the plot
+  print(plot)
+  
+  # Save the plot
+  ggsave(paste0("food_expenditure_plots/food_spending_composition_", yr, ".png"), plot,
+          width = 10, height = 6, dpi = 300)
+  
+  # Store the plot for later use in the dashboard
+  spending_composition_plots[[as.character(yr)]] <- plot
+}
+
+# Also create a combined faceted plot of all years
+spending_composition_faceted <- ggplot(spending_data,
+                           aes(x = IncomeGroup,
+                               y = Amount, fill = SpendCategory)) +
+  geom_bar(stat = "identity", position = "stack", width = 0.7) +
+  scale_y_continuous(labels = dollar_format()) +
+  scale_fill_manual(values = category_colors) +
   coord_flip() +
-  labs(title = "Average Food Prices by Category (2013–2023)",
-       x = "Food Category",
-       y = "Average Price ($)") +
-  theme_minimal()
-
-
-```
-
-## CEX Data EDA
-
-```{r}
-cex_data <- read_csv("C:/Users/omyue/OneDrive/Desktop/DATA 205/U.S. Bureau of Labor Statistics – Consumer Expenditure Surveys (CE)/income_group_annual_food_spend.csv")
-```
-
-```{r}
-# Creates a visualization seeing the spending for different food related expenditures
-spend_plot <- ggplot(annual_food_spend, aes(x = year)) +
-  geom_line(aes(y = mean_grocery_spend, color = "Groceries"), linewidth = 1) +
-  geom_line(aes(y = mean_dining_spend, color = "Dining Out"), linewidth = 1) +
-  geom_line(aes(y = mean_school_lunch_spend, color = "School Lunch"), linewidth = 1) +
-  geom_line(aes(y = mean_total_food_spend, color = "Total Food"), linewidth = 1.5) +
-  scale_color_manual(
-    values = c(
-      "Groceries" = "forestgreen",
-      "Dining Out" = "darkred",
-      "School Lunch" = "orange",
-      "Total Food" = "navy"
-    )
-  ) +
+  facet_wrap(~ year, ncol = 2) +
   labs(
-    title = "Annual Average Food Spending (2013-2023)",
-    subtitle = "Consumer Expenditure Survey Data",
-    x = "Year",
-    y = "Average Annual Spending ($)",
-    color = "Category"
+    title = "Food Expenditure Composition Across Years",
+    subtitle = "Breakdown of spending by category for each income group",
+    x = NULL,
+    y = "Average Annual Expenditure",
+    fill = "Spending Category"
   ) +
-  theme_minimal() +
-  theme(legend.position = "bottom")
-print(spend_plot)
-```
-
-## Distribution of Food Expenditure by Class
-
-```{r}
-cex_data <- read_csv("C:/Users/omyue/OneDrive/Desktop/DATA 205/U.S. Bureau of Labor Statistics – Consumer Expenditure Surveys (CE)/income_group_annual_food_spend.csv")
-
-# Ensure income_group is a factor with proper ordering
-cex_data <- cex_data %>%
-  mutate(income_group = factor(income_group, levels = c(
-    "Under $5,000",
-    "$5,000 to $9,999",
-    "$10,000 to $14,999",
-    "$15,000 to $19,999",
-    "$20,000 to $29,999",
-    "$30,000 to $39,999",
-    "$40,000 to $49,999",
-    "$50,000 to $69,999",
-    "$70,000 and over"
-  )))
-
-# Create a  plot
-ggplot(cex_data, aes(x = income_group, y = mean_total_food_spend)) +
-  geom_col(fill = "steelblue") +
-  scale_y_continuous(labels = dollar) +
-  labs(
-    title = "Average Total Food Spending by Income Group",
-    x = "Income Group",
-    y = "Average Total Food Spending"
-  ) +
-  theme_minimal() +
+  theme_food() +
   theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
-    panel.grid.minor = element_blank()
+    strip.background = element_rect(fill = "#F8F0E8"),
+    strip.text = element_text(face = "bold", size = 10, color = "#6D6875"),
+    axis.text.y = element_text(size = 5)
   )
 
+# Display the faceted plot
+spending_composition_faceted
+
+Yearly Income Expenditure Comparisons
+
+This faceted line chart plots each income bracket’s average annual food spending from 2013 through 2017‑Q3 on its own small panel, with a shared time axis but independent vertical scales. By laying out every cohort side‑by‑side, you can immediately spot which groups saw the steepest upward trajectory (e.g. lower‑income households) versus those with flatter spending patterns. The free‑scale y‑axes ensure that even smaller groups’ trends remain visible, while the plasma color gradient highlights each line distinctly without a distracting legend.
+
+{r}
+# Determine number of colors needed
+n_income_groups <- length(unique(expenditure_data$IncomeGroup))
+palette_colors <- extend_palette(custom_palette, n_income_groups)
+
+yearly_comparison <- ggplot(expenditure_data,
+                           aes(x = year, y = MeanTotalFoodSpend, 
+                               color = IncomeGroup, group = IncomeGroup)) +
+  geom_line(size = 1.2, alpha = 0.8) +
+  geom_point(size = 2.5) +
+  scale_y_continuous(labels = dollar_format()) +
+  scale_color_manual(values = palette_colors) +    # ← use custom palette here
+  facet_wrap(~ IncomeGroup, scales = "free_y", ncol = 3) +
+  labs(
+    title = "Food Expenditure Trends by Income Group",
+    subtitle = "Individual trend lines for each income group",
+    x = "Year",
+    y = "Mean Total Food Expenditure",
+    color = "Income Group"
+  ) +
+  theme_food() +
+  theme(
+    legend.position = "none",
+    strip.background = element_rect(fill = "#f5f5f5"),
+    strip.text = element_text(face = "bold")
   )
-```
+
+yearly_comparison
+
+
+This graph exhibits the trends in mean total food expenditure from 2013 to 2017 across different income groups. Generally, food spending increased for most income groups during this period, especially for those earning under $40,000 annually, who show a steady upward trend.
+
+Interestingly, the highest income group ($70,000 and over) exhibited a sharp drop in 2015, followed by a plateau, suggesting possible changes in spending habits, budgeting behavior, or data anomalies for that group. Overall, the graph indicates that lower-income households consistently increased their food spending over time, possibly due to inflation or shifts in food affordability, while higher-income households may have optimized or reduced their food expenses despite their greater means.
+
+Takeaways from EDA
+
+From 2013 to 2020, food prices climbed faster than overall inflation, but they were at their peak during the extreme inflation spikes in 2021–23. When we line up average food‑price changes against the core CPI (which takes out food and energy for its calculation), you can see food prices skyrocketing. And digging deeper, meats like beef and beverages jumped way above the baseline while staples like grains were rather stable. Essentially, when inflation kicked in, the cost of your steak shot up, but your loaf of bread or can of green beans stayed mostly steady.
+
+Then we looked at who’s paying the tab. Low‑income households saw the biggest year‑to‑year jumps in their grocery bills, while wealthier families actually dialed back spending after 2015. We also saw that fruits and veggies swing wildly with the seasons but pantry staples hold their ground. All together, it paints a picture of folks on tight budgets getting squeezed hardest—cutting back on pricey proteins and leaning more on cheap staples. That’s exactly the story our next analyses will unpack in numbers and models.
