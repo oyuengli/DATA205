@@ -18,18 +18,31 @@ Over the past decade, U.S. food prices have risen faster than overall inflation,
 ## 📂 Repository Structure
 
 ├── README.md # Project overview and instructions
+
 ├── Data Files/ # Raw and processed data files
+
 │ ├── core_inflation_1983-2025.csv
+
 │ ├── average_prices.csv
+
 │ ├── ces_data.csv
+
 │ └── food_expenditure_summary.csv
+
 ├── DATA 205 Project Code/ # R and Python scripts
+
 │ ├── 01_data_ingestion.Rmd # Data loading & cleaning functions
+
 │ ├── 02_EDA.Rmd # Exploratory Data Analysis
+
 │ ├── 03_DATA_205_Yuengling_Analyses.Rmd # Statistical tests & modeling
+
 │ └── ces_data_load.ipynb # CES data preprocessing (Python)
+
 ├── reports/ # Output documents
+
 │ ├── DATA205_33334_Yuengling_FinalReport.docx
+
 │ └── DATA205_33334_Yuengling_Presentation.pptx
 
 
