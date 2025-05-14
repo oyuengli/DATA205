@@ -92,12 +92,4 @@ cd data205-food-inflation
 
 These insights guide policy recommendations on targeted food assistance and pricing interventions.
 
----
-
-## 🤝 Collaboration & License
-This work is released under the MIT License – see `LICENSE` for details.  
-Feel free to fork and adapt with attribution.  
-
-For questions or data access issues, contact Olivia at olivia.yuengling@example.com.
-
 ```
