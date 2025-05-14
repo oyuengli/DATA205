@@ -78,7 +78,6 @@ install.packages(c("tidyverse", "highcharter", "lubridate", "corrplot", "dplyr",
 - **01_data_ingestion.Rmd**: Loads and cleans CES & CPI datasets, merges data, outputs `food_expenditure_summary.csv`.
 - **02_EDA.Rmd**: Time series, seasonal patterns, income trends, heatmaps, volatility analysis.
 - **03_DATA_205_Yuengling_Analyses.Rmd**: Correlations, regressions, ANOVA, and interpretations.
-- **utils.R**: Custom `ggplot2` theme (`theme_food`), color palettes, reusable data-wrangling functions.
 - **reports/**: Final project report and presentation deck.
 
 ---
