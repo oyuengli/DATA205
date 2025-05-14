@@ -34,7 +34,6 @@ Ultimately, we identify who bears the brunt of food inflation and which items th
 │   ├── 03_analysis.Rmd      # Statistical tests & modeling
 │   └── utils.R              # Reusable functions (themes, palettes)
 ├── reports/                 # Outputs
-│   ├── figures/             # PNGs of key plots
 │   ├── final_report.pdf     # Written report
 │   └── presentation.pptx    # Slide deck
 ```
